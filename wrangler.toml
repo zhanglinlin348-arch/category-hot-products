@@ -5,7 +5,7 @@ pages_build_output_dir = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "category-hot-products"
-database_id = "替换为你创建的D1数据库ID"
+database_id = "8bcf293b-b23a-423d-b122-945d44622be8"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
