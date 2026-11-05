@@ -1,11 +1,8 @@
-
-function isAdmin(request) {
-  return !!request.headers.get('Cf-Access-Authenticated-User-Email');
-}
+import { isAdmin } from '../../_lib/auth.js';
 
 export async function onRequestPost({ request, env }) {
-  if (!isAdmin(request)) {
-    return Response.json({ error: '需要管理员登录' }, { status: 401 });
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: '需要管理员登录或没有管理员权限' }, { status: 401 });
   }
 
   const supabaseUrl = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
@@ -36,9 +33,7 @@ export async function onRequestPost({ request, env }) {
     .toLowerCase() || 'jpg';
 
   const key = `${crypto.randomUUID()}.${ext}`;
-
-  const uploadUrl =
-    `${supabaseUrl}/storage/v1/object/product-images/${key}`;
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/product-images/${key}`;
 
   try {
     const uploadResponse = await fetch(uploadUrl, {
@@ -60,17 +55,13 @@ export async function onRequestPost({ request, env }) {
       }, { status: 502 });
     }
 
-    const publicUrl =
-      `${supabaseUrl}/storage/v1/object/public/product-images/${key}`;
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${key}`;
 
     await env.DB.prepare(
       'UPDATE products SET image_url=?, updated_at=? WHERE id=?'
     ).bind(publicUrl, new Date().toISOString(), id).run();
 
-    return Response.json({
-      success: true,
-      image_url: publicUrl
-    });
+    return Response.json({ success: true, image_url: publicUrl });
 
   } catch (error) {
     return Response.json({
