@@ -1,0 +1,13 @@
+name = "category-hot-products"
+compatibility_date = "2026-11-05"
+pages_build_output_dir = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "category-hot-products"
+database_id = "替换为你创建的D1数据库ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "category-hot-products-images"
