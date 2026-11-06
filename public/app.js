@@ -1,10 +1,218 @@
-let allProducts=[], selected=null, expanded=new Set(), search='';
-const $=id=>document.getElementById(id);
-async function load(){try{const r=await fetch('/api/public/data');const d=await r.json();allProducts=d.products||[];renderTree();renderCards()}catch(e){$('cards').innerHTML='<div class="empty">数据加载失败，请稍后刷新</div>'}}
-function treeData(){const root={};for(const p of allProducts){const a=p.category3||'未分类',b=p.category4||'未分类',c=p.leaf_category||'未分类';root[a]??={};root[a][b]??=new Set();root[a][b].add(c)}return root}
-function renderTree(){const root=treeData();const count=new Set(allProducts.map(p=>p.leaf_category)).size;$('categoryCount').textContent=`${Object.keys(root).length} 个三级类目 · ${count} 个叶子类目`;
-let html='';for(const [a,lv4] of Object.entries(root)){const keyA='a:'+a, openA=expanded.has(keyA)||!!search;html+=`<div class="tree-node"><div class="tree-label ${selected?.type==='a'&&selected.value===a?'active':''}" data-type="a" data-value="${esc(a)}"><span class="tree-toggle">${openA?'▼':'▶'}</span><b>${esc(a)}</b></div>`;if(openA){html+='<div class="tree-children">';for(const [b,leaves] of Object.entries(lv4)){const keyB='b:'+a+'|'+b,openB=expanded.has(keyB)||!!search;html+=`<div class="tree-node"><div class="tree-label ${selected?.type==='b'&&selected.value===a+'|'+b?'active':''}" data-type="b" data-value="${esc(a+'|'+b)}"><span class="tree-toggle">${openB?'▼':'▶'}</span>${esc(b)}</div>`;if(openB){html+='<div class="tree-children">';for(const c of leaves){html+=`<div class="tree-label ${selected?.type==='c'&&selected.value===a+'|'+b+'|'+c?'active':''}" data-type="c" data-value="${esc(a+'|'+b+'|'+c)}"><span class="tree-toggle">•</span>${esc(c)}</div>`}html+='</div>'}}html+='</div>'}html+='</div>'}$('tree').innerHTML=html||'<div class="empty">暂无类目，请管理员导入 Excel</div>';
-$('tree').querySelectorAll('.tree-label').forEach(el=>el.addEventListener('click',()=>{const type=el.dataset.type,value=el.dataset.value;if(type==='a'){const k='a:'+value;expanded.has(k)?expanded.delete(k):expanded.add(k)}if(type==='b'){const k='b:'+value;expanded.has(k)?expanded.delete(k):expanded.add(k)}selected={type,value};renderTree();renderCards()}));}
-function renderCards(){let rows=[...allProducts];if(selected){const v=selected.value.split('|');rows=rows.filter(p=>selected.type==='a'?p.category3===v[0]:selected.type==='b'?p.category3===v[0]&&p.category4===v[1]:p.category3===v[0]&&p.category4===v[1]&&p.leaf_category===v[2])}if(search){const q=search.toLowerCase();rows=rows.filter(p=>[p.category3,p.category4,p.leaf_category,p.product_name].some(x=>(x||'').toLowerCase().includes(q)))}const sort=$('sortSelect').value;rows.sort((a,b)=>sort==='priority'?(a.priority-b.priority):(new Date(b.updated_at)-new Date(a.updated_at)));$('heading').textContent=selected?selected.value.split('|').at(-1):'全部爆款商品';$('subheading').textContent=selected?'当前类目下的商品与改款机会':'按类目浏览商品灵感与改款机会';$('activePath').innerHTML=selected?selected.value.split('|').map(x=>`<span class="chip">${esc(x)}</span>`).join(''):'<span class="chip">全部类目</span>';$('resultCount').textContent=`${rows.length} 件商品`;$('cards').innerHTML=rows.length?rows.map(p=>`<article class="product-card"><div class="product-image">${p.image_url?`<img src="${esc(p.image_url)}" loading="lazy" alt="${esc(p.product_name)}">`:'<span class="no-image">暂无商品图片</span>'}${p.makeover?'<span class="makeover">改款</span>':''}<span class="priority">优先级 ${p.priority}</span></div><div class="card-body"><div class="card-title">${esc(p.product_name)}</div><div class="crumb">${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}</div><div class="card-foot"><span>商品灵感</span><span>${date(p.updated_at)}</span></div></div></article>`).join(''):'<div class="empty">当前条件下暂无商品</div>'}
-function date(s){return s?new Date(s).toLocaleDateString('zh-CN'):'—'}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-$('searchInput').addEventListener('input',e=>{search=e.target.value.trim();renderTree();renderCards()});$('sortSelect').addEventListener('change',renderCards);$('refreshBtn').addEventListener('click',load);$('expandAll').addEventListener('click',()=>{for(const p of allProducts){expanded.add('a:'+(p.category3||'未分类'));expanded.add('b:'+(p.category3||'未分类')+'|'+(p.category4||'未分类'))}renderTree()});load();setInterval(load,60000);
+
+let allProducts = [], selected = null, expanded = new Set(), search = '';
+
+const $ = id => document.getElementById(id);
+
+async function load() {
+  try {
+    const r = await fetch('/api/public/data');
+    const d = await r.json();
+    allProducts = d.products || [];
+    renderTree();
+    renderCards();
+  } catch (e) {
+    $('cards').innerHTML = '<div class="empty">数据加载失败，请稍后刷新</div>';
+  }
+}
+
+function treeData() {
+  const root = {};
+  for (const p of allProducts) {
+    const a = p.category3 || '未分类';
+    const b = p.category4 || '未分类';
+    const c = p.leaf_category || '未分类';
+    root[a] ??= {};
+    root[a][b] ??= new Set();
+    root[a][b].add(c);
+  }
+  return root;
+}
+
+function renderTree() {
+  const root = treeData();
+  const count = new Set(allProducts.map(p => p.leaf_category || '未分类')).size;
+
+  $('categoryCount').textContent =
+    `${Object.keys(root).length} 个三级类目 · ${count} 个叶子类目`;
+
+  let html = '';
+
+  for (const [a, lv4] of Object.entries(root)) {
+    const keyA = 'a:' + a;
+    const openA = expanded.has(keyA) || !!search;
+
+    html += `<div class="tree-node">
+      <div class="tree-label ${selected?.type === 'a' && selected.value === a ? 'active' : ''}"
+        data-type="a" data-value="${esc(a)}">
+        <span class="tree-toggle">${openA ? '▼' : '▶'}</span>
+        <b>${esc(a)}</b>
+      </div>`;
+
+    if (openA) {
+      html += '<div class="tree-children">';
+
+      for (const [b, leaves] of Object.entries(lv4)) {
+        const keyB = 'b:' + a + '|' + b;
+        const openB = expanded.has(keyB) || !!search;
+
+        html += `<div class="tree-node">
+          <div class="tree-label ${selected?.type === 'b' && selected.value === a + '|' + b ? 'active' : ''}"
+            data-type="b" data-value="${esc(a + '|' + b)}">
+            <span class="tree-toggle">${openB ? '▼' : '▶'}</span>
+            ${esc(b)}
+          </div>`;
+
+        if (openB) {
+          html += '<div class="tree-children">';
+
+          for (const c of leaves) {
+            html += `<div class="tree-label ${selected?.type === 'c' && selected.value === a + '|' + b + '|' + c ? 'active' : ''}"
+              data-type="c" data-value="${esc(a + '|' + b + '|' + c)}">
+              <span class="tree-toggle">•</span>${esc(c)}
+            </div>`;
+          }
+
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  $('tree').innerHTML = html ||
+    '<div class="empty">暂无类目，请管理员导入 Excel</div>';
+
+  $('tree').querySelectorAll('.tree-label').forEach(el => {
+    el.addEventListener('click', () => {
+      const type = el.dataset.type;
+      const value = el.dataset.value;
+
+      if (type === 'a') {
+        const k = 'a:' + value;
+        expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+      }
+
+      if (type === 'b') {
+        const k = 'b:' + value;
+        expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+      }
+
+      selected = { type, value };
+      renderTree();
+      renderCards();
+    });
+  });
+}
+
+function renderCards() {
+  let rows = [...allProducts];
+
+  if (selected) {
+    const v = selected.value.split('|');
+
+    rows = rows.filter(p => {
+      const c3 = p.category3 || '未分类';
+      const c4 = p.category4 || '未分类';
+      const leaf = p.leaf_category || '未分类';
+
+      if (selected.type === 'a') return c3 === v[0];
+
+      if (selected.type === 'b') {
+        return c3 === v[0] && c4 === v[1];
+      }
+
+      return c3 === v[0] && c4 === v[1] && leaf === v[2];
+    });
+  }
+
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(p =>
+      [p.category3, p.category4, p.leaf_category, p.product_name]
+        .some(x => (x || '').toLowerCase().includes(q))
+    );
+  }
+
+  const sort = $('sortSelect').value;
+
+  rows.sort((a, b) =>
+    sort === 'priority'
+      ? (a.priority - b.priority)
+      : (new Date(b.updated_at) - new Date(a.updated_at))
+  );
+
+  $('heading').textContent =
+    selected ? selected.value.split('|').at(-1) : '全部爆款商品';
+
+  $('subheading').textContent =
+    selected ? '当前类目下的商品与改款机会' : '按类目浏览商品灵感与改款机会';
+
+  $('activePath').innerHTML = selected
+    ? selected.value.split('|').map(x => `<span class="chip">${esc(x)}</span>`).join('')
+    : '<span class="chip">全部类目</span>';
+
+  $('resultCount').textContent = `${rows.length} 件商品`;
+
+  $('cards').innerHTML = rows.length
+    ? rows.map(p => `
+      <article class="product-card">
+        <div class="product-image">
+          ${p.image_url
+            ? `<img src="${esc(p.image_url)}" loading="lazy" alt="${esc(p.product_name)}">`
+            : '<span class="no-image">暂无商品图片</span>'}
+          ${p.makeover ? '<span class="makeover">改款</span>' : ''}
+          <span class="priority">优先级 ${p.priority}</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">${esc(p.product_name)}</div>
+          <div class="crumb">${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}</div>
+          <div class="card-foot">
+            <span>商品灵感</span>
+            <span>${date(p.updated_at)}</span>
+          </div>
+        </div>
+      </article>
+    `).join('')
+    : '<div class="empty">当前条件下暂无商品</div>';
+}
+
+function date(s) {
+  return s ? new Date(s).toLocaleDateString('zh-CN') : '—';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
+
+$('searchInput').addEventListener('input', e => {
+  search = e.target.value.trim();
+  renderTree();
+  renderCards();
+});
+
+$('sortSelect').addEventListener('change', renderCards);
+$('refreshBtn').addEventListener('click', load);
+
+$('expandAll').addEventListener('click', () => {
+  for (const p of allProducts) {
+    const a = p.category3 || '未分类';
+    const b = p.category4 || '未分类';
+    expanded.add('a:' + a);
+    expanded.add('b:' + a + '|' + b);
+  }
+  renderTree();
+});
+
+load();
+setInterval(load, 60000);
