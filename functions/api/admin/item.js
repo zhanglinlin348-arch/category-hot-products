@@ -39,12 +39,51 @@ export async function onRequestPatch({ request, env }) {
     );
   }
 
+  // 售价：允许空值，非空时必须是大于等于 0 的数字
+  let price = null;
+  const hasPrice = Object.hasOwn(body, 'price');
+
+  if (hasPrice && body.price !== null && body.price !== '') {
+    price = Number(body.price);
+
+    if (!Number.isFinite(price) || price < 0) {
+      return Response.json(
+        { error: '售价必须是大于或等于 0 的数字' },
+        { status: 400 }
+      );
+    }
+  }
+
+  // 预估日销：允许空值，非空时必须是大于等于 0 的整数
+  let estimatedDailySales = null;
+  const hasDailySales = Object.hasOwn(body, 'estimated_daily_sales');
+
+  if (
+    hasDailySales &&
+    body.estimated_daily_sales !== null &&
+    body.estimated_daily_sales !== ''
+  ) {
+    estimatedDailySales = Number(body.estimated_daily_sales);
+
+    if (
+      !Number.isInteger(estimatedDailySales) ||
+      estimatedDailySales < 0
+    ) {
+      return Response.json(
+        { error: '预估日销必须是大于或等于 0 的整数' },
+        { status: 400 }
+      );
+    }
+  }
+
   await env.DB.prepare(`
     UPDATE products
     SET priority = ?,
         makeover = ?,
         site = COALESCE(?, site),
         business_mode = COALESCE(?, business_mode),
+        price = CASE WHEN ? = 1 THEN ? ELSE price END,
+        estimated_daily_sales = CASE WHEN ? = 1 THEN ? ELSE estimated_daily_sales END,
         updated_at = ?
     WHERE id = ?
   `).bind(
@@ -52,6 +91,10 @@ export async function onRequestPatch({ request, env }) {
     body.makeover ? 1 : 0,
     site,
     businessMode,
+    hasPrice ? 1 : 0,
+    price,
+    hasDailySales ? 1 : 0,
+    estimatedDailySales,
     new Date().toISOString(),
     id
   ).run();
