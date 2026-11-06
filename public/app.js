@@ -98,10 +98,8 @@ function renderTree() {
 
   for (const [a, lv4] of Object.entries(root)) {
     const keyA = 'a:' + a;
-
     const openA = expanded.has(keyA) || !!search;
 
-    // 搜索时只显示有匹配商品的分支
     const matchedA = !q || searchResults.some(p =>
       categoryPath(p)[0] === a
     );
@@ -179,11 +177,9 @@ function renderTree() {
       const type = el.dataset.type;
       const value = el.dataset.value;
 
-      // 点击类目时清除搜索词
       search = '';
       $('searchInput').value = '';
 
-      // 展开或收起三级类目
       if (type === 'a') {
         const k = 'a:' + value;
 
@@ -192,7 +188,6 @@ function renderTree() {
           : expanded.add(k);
       }
 
-      // 展开或收起四级类目
       if (type === 'b') {
         const k = 'b:' + value;
 
@@ -201,8 +196,6 @@ function renderTree() {
           : expanded.add(k);
       }
 
-      // 核心修改：
-      // 再次点击当前已选中的类目，取消选择
       if (selected?.type === type && selected?.value === value) {
         selected = null;
       } else {
@@ -302,6 +295,16 @@ function renderCards() {
           <div class="crumb">
             业务模式：${esc(p.business_mode || '未设置')}
           </div>
+          <div class="crumb">
+            售价：${p.price !== null && p.price !== undefined && p.price !== ''
+              ? '$' + Number(p.price).toFixed(2)
+              : '未设置'}
+          </div>
+          <div class="crumb">
+            预估日销：${p.estimated_daily_sales !== null && p.estimated_daily_sales !== undefined && p.estimated_daily_sales !== ''
+              ? Number(p.estimated_daily_sales) + ' 件/天'
+              : '未设置'}
+          </div>
           <div class="card-foot">
             <span>商品灵感</span>
             <span>${date(p.updated_at)}</span>
@@ -330,14 +333,12 @@ function esc(s) {
 $('searchInput').addEventListener('input', e => {
   search = e.target.value.trim();
 
-  // 输入关键词时清除此前点击类目产生的筛选
   if (search) {
     selected = null;
     expanded.clear();
     updateSearchExpansion();
   }
 
-  // 清空关键词后恢复全部类目
   if (!search) {
     selected = null;
     expanded.clear();
