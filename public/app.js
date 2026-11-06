@@ -48,7 +48,7 @@ function treeData() {
   return root;
 }
 
-// 获取搜索匹配的商品，并自动展开对应类目
+// 获取搜索匹配的商品
 function getSearchResults() {
   const q = norm(search);
 
@@ -66,6 +66,7 @@ function getSearchResults() {
   });
 }
 
+// 搜索时自动展开对应类目
 function updateSearchExpansion() {
   if (!search) return;
 
@@ -92,6 +93,7 @@ function renderTree() {
   updateSearchExpansion();
 
   const q = norm(search);
+  const searchResults = q ? getSearchResults() : [];
   let html = '';
 
   for (const [a, lv4] of Object.entries(root)) {
@@ -100,9 +102,8 @@ function renderTree() {
     const openA = expanded.has(keyA) || !!search;
 
     // 搜索时只显示有匹配商品的分支
-    const matchedA = !q || allProducts.some(p =>
-      categoryPath(p)[0] === a &&
-      getSearchResults().includes(p)
+    const matchedA = !q || searchResults.some(p =>
+      categoryPath(p)[0] === a
     );
 
     if (!matchedA) continue;
@@ -121,10 +122,9 @@ function renderTree() {
         const keyB = 'b:' + a + '|' + b;
         const openB = expanded.has(keyB) || !!search;
 
-        const matchedB = !q || allProducts.some(p =>
+        const matchedB = !q || searchResults.some(p =>
           categoryPath(p)[0] === a &&
-          categoryPath(p)[1] === b &&
-          getSearchResults().includes(p)
+          categoryPath(p)[1] === b
         );
 
         if (!matchedB) continue;
@@ -140,11 +140,10 @@ function renderTree() {
           html += '<div class="tree-children">';
 
           for (const c of leaves) {
-            const matchedC = !q || allProducts.some(p =>
+            const matchedC = !q || searchResults.some(p =>
               categoryPath(p)[0] === a &&
               categoryPath(p)[1] === b &&
-              categoryPath(p)[2] === c &&
-              getSearchResults().includes(p)
+              categoryPath(p)[2] === c
             );
 
             if (!matchedC) continue;
@@ -174,30 +173,41 @@ function renderTree() {
   $('tree').innerHTML = html ||
     '<div class="empty">没有匹配的类目</div>';
 
+  // 类目点击事件
   $('tree').querySelectorAll('.tree-label').forEach(el => {
     el.addEventListener('click', () => {
       const type = el.dataset.type;
       const value = el.dataset.value;
 
-      // 点击类目时清除搜索词，避免条件叠加
+      // 点击类目时清除搜索词
       search = '';
       $('searchInput').value = '';
 
+      // 展开或收起三级类目
       if (type === 'a') {
         const k = 'a:' + value;
+
         expanded.has(k)
           ? expanded.delete(k)
           : expanded.add(k);
       }
 
+      // 展开或收起四级类目
       if (type === 'b') {
         const k = 'b:' + value;
+
         expanded.has(k)
           ? expanded.delete(k)
           : expanded.add(k);
       }
 
-      selected = { type, value };
+      // 核心修改：
+      // 再次点击当前已选中的类目，取消选择
+      if (selected?.type === type && selected?.value === value) {
+        selected = null;
+      } else {
+        selected = { type, value };
+      }
 
       renderTree();
       renderCards();
@@ -239,6 +249,7 @@ function renderCards() {
     });
   }
 
+  // 排序
   const sort = $('sortSelect').value;
 
   rows.sort((a, b) =>
@@ -247,6 +258,7 @@ function renderCards() {
       : (new Date(b.updated_at) - new Date(a.updated_at))
   );
 
+  // 标题
   $('heading').textContent = search
     ? '搜索结果'
     : selected
@@ -259,6 +271,7 @@ function renderCards() {
       ? '当前类目下的商品与改款机会'
       : '按类目浏览商品灵感与改款机会';
 
+  // 当前筛选路径
   $('activePath').innerHTML = search
     ? `<span class="chip">搜索：${esc(search)}</span>`
     : selected
@@ -269,6 +282,7 @@ function renderCards() {
 
   $('resultCount').textContent = `${rows.length} 件商品`;
 
+  // 商品卡片
   $('cards').innerHTML = rows.length
     ? rows.map(p => `
       <article class="product-card">
@@ -312,6 +326,7 @@ function esc(s) {
   }[c]));
 }
 
+// 搜索框
 $('searchInput').addEventListener('input', e => {
   search = e.target.value.trim();
 
@@ -332,16 +347,20 @@ $('searchInput').addEventListener('input', e => {
   renderCards();
 });
 
+// 排序
 $('sortSelect').addEventListener('change', renderCards);
 
 // 业务模式筛选
 $('businessModeFilter').addEventListener('change', renderCards);
 
+// 刷新
 $('refreshBtn').addEventListener('click', load);
 
+// 展开全部类目
 $('expandAll').addEventListener('click', () => {
   for (const p of allProducts) {
     const [a, b] = categoryPath(p);
+
     expanded.add('a:' + a);
     expanded.add('b:' + a + '|' + b);
   }
@@ -349,5 +368,8 @@ $('expandAll').addEventListener('click', () => {
   renderTree();
 });
 
+// 初始加载
 load();
+
+// 每60秒自动刷新
 setInterval(load, 60000);
