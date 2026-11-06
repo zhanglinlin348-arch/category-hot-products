@@ -159,8 +159,14 @@ function render() {
   const q = $('adminSearch').value.trim().toLowerCase();
 
   const rows = products.filter(p =>
-    [p.product_name, p.leaf_category, p.category3, p.category4, p.site, p.business_mode]
-      .some(v => String(v || '').toLowerCase().includes(q))
+    [
+      p.product_name,
+      p.leaf_category,
+      p.category3,
+      p.category4,
+      p.site,
+      p.business_mode
+    ].some(v => String(v || '').toLowerCase().includes(q))
   );
 
   $('adminCount').textContent = `共 ${products.length} 件`;
@@ -197,6 +203,18 @@ function render() {
           </select>
         </label>
 
+        <label>售价（$）<br>
+          <input class="price-input" type="number"
+            min="0" step="0.01" placeholder="例如：29.99"
+            value="${p.price ?? ''}">
+        </label>
+
+        <label>预估日销<br>
+          <input class="daily-sales-input" type="number"
+            min="0" step="1" placeholder="例如：120"
+            value="${p.estimated_daily_sales ?? ''}">
+        </label>
+
         <label class="makeover-control">
           <input class="makeover-input" type="checkbox"
             ${p.makeover ? 'checked' : ''}> 改款标签
@@ -226,6 +244,12 @@ function bindRows() {
       .addEventListener('change', () => save(row));
 
     row.querySelector('.business-mode-input')
+      .addEventListener('change', () => save(row));
+
+    row.querySelector('.price-input')
+      .addEventListener('change', () => save(row));
+
+    row.querySelector('.daily-sales-input')
       .addEventListener('change', () => save(row));
 
     row.querySelector('.makeover-input')
@@ -273,15 +297,35 @@ function bindRows() {
   });
 }
 
-// 保存优先级、改款、站点和业务模式
+// 保存商品信息
 async function save(row) {
   const site = row.querySelector('.site-input').value.trim();
   const businessMode = row.querySelector('.business-mode-input').value;
+
+  const priceText = row.querySelector('.price-input').value.trim();
+  const salesText = row.querySelector('.daily-sales-input').value.trim();
+
+  const price = priceText === '' ? null : Number(priceText);
+  const dailySales = salesText === '' ? null : Number(salesText);
 
   if (!['', '全托', '半托'].includes(businessMode)) {
     alert('业务模式只能选择全托或半托');
     return;
   }
+
+  if (price !== null && (!Number.isFinite(price) || price < 0)) {
+    alert('售价必须是大于或等于 0 的有效数字');
+    return;
+  }
+
+  if (dailySales !== null &&
+      (!Number.isInteger(dailySales) || dailySales < 0)) {
+    alert('预估日销必须是大于或等于 0 的整数');
+    return;
+  }
+
+  const priority = Number(row.querySelector('.priority-input').value) || 999;
+  const makeover = row.querySelector('.makeover-input').checked;
 
   try {
     await api('/api/admin/item', {
@@ -289,20 +333,24 @@ async function save(row) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: row.dataset.id,
-        priority: row.querySelector('.priority-input').value,
-        makeover: row.querySelector('.makeover-input').checked,
+        priority,
+        makeover,
         site,
-        business_mode: businessMode
+        business_mode: businessMode,
+        price,
+        estimated_daily_sales: dailySales
       })
     });
 
     const p = products.find(x => String(x.id) === String(row.dataset.id));
 
     if (p) {
-      p.priority = Number(row.querySelector('.priority-input').value) || 999;
-      p.makeover = row.querySelector('.makeover-input').checked ? 1 : 0;
+      p.priority = priority;
+      p.makeover = makeover ? 1 : 0;
       p.site = site;
       p.business_mode = businessMode;
+      p.price = price;
+      p.estimated_daily_sales = dailySales;
       p.updated_at = new Date().toISOString();
     }
   } catch (e) {
@@ -315,6 +363,7 @@ function normalizeRows(json) {
   if (!json.length) return [];
 
   const headers = Object.keys(json[0]);
+
   const find = (...names) =>
     headers.find(h => names.includes(String(h).trim().toLowerCase()));
 
@@ -327,16 +376,33 @@ function normalizeRows(json) {
   const hm = find('改款', '改款标签', 'makeover');
   const hs = find('站点', 'site', '站点名称');
   const hb = find('业务模式', 'business_mode');
+  const hprice = find('售价（$）', '售价($)', '售价', 'price');
+  const hsales = find('预估日销', '预估日销量', 'estimated_daily_sales');
 
   if (!hl || !hn) {
     throw new Error('Excel 必须包含“叶子类目”和“商品名称”两列');
   }
 
-  const result = json.map(r => {
+  const result = json.map((r, index) => {
     const businessMode = String(r[hb] || '').trim();
 
     if (!['', '全托', '半托'].includes(businessMode)) {
-      throw new Error(`业务模式“${businessMode}”不正确，只能填写全托或半托`);
+      throw new Error(`第 ${index + 2} 行业务模式不正确，只能填写全托或半托`);
+    }
+
+    const priceText = hprice ? String(r[hprice]).trim() : '';
+    const salesText = hsales ? String(r[hsales]).trim() : '';
+
+    const price = priceText === '' ? null : Number(priceText);
+    const dailySales = salesText === '' ? null : Number(salesText);
+
+    if (price !== null && (!Number.isFinite(price) || price < 0)) {
+      throw new Error(`第 ${index + 2} 行售价无效`);
+    }
+
+    if (dailySales !== null &&
+        (!Number.isInteger(dailySales) || dailySales < 0)) {
+      throw new Error(`第 ${index + 2} 行预估日销必须是非负整数`);
     }
 
     return {
@@ -348,7 +414,9 @@ function normalizeRows(json) {
       priority: Number(r[hp]) || 999,
       makeover: r[hm] || '',
       site: String(r[hs] || '').trim(),
-      business_mode: businessMode
+      business_mode: businessMode,
+      price,
+      estimated_daily_sales: dailySales
     };
   }).filter(r =>
     String(r.leaf_category).trim() &&
