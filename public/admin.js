@@ -159,8 +159,8 @@ function render() {
   const q = $('adminSearch').value.trim().toLowerCase();
 
   const rows = products.filter(p =>
-    [p.product_name, p.leaf_category, p.category3, p.category4]
-      .some(v => (v || '').toLowerCase().includes(q))
+    [p.product_name, p.leaf_category, p.category3, p.category4, p.site, p.business_mode]
+      .some(v => String(v || '').toLowerCase().includes(q))
   );
 
   $('adminCount').textContent = `共 ${products.length} 件`;
@@ -170,24 +170,43 @@ function render() {
       <div class="admin-row" data-id="${esc(p.id)}">
         <img class="admin-thumb" src="${esc(p.image_url || '')}"
           onerror="this.style.visibility='hidden'">
+
         <div>
           <div class="admin-name">${esc(p.product_name)}</div>
           <div class="admin-meta">
             ${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}
           </div>
         </div>
+
         <label>优先级<br>
           <input class="priority-input" type="number" min="1"
-            value="${p.priority}">
+            value="${esc(p.priority ?? 999)}">
         </label>
+
+        <label>站点<br>
+          <input class="site-input" type="text"
+            placeholder="例如：美国站"
+            value="${esc(p.site || '')}">
+        </label>
+
+        <label>业务模式<br>
+          <select class="business-mode-input">
+            <option value="" ${!p.business_mode ? 'selected' : ''}>请选择</option>
+            <option value="全托" ${p.business_mode === '全托' ? 'selected' : ''}>全托</option>
+            <option value="半托" ${p.business_mode === '半托' ? 'selected' : ''}>半托</option>
+          </select>
+        </label>
+
         <label class="makeover-control">
           <input class="makeover-input" type="checkbox"
             ${p.makeover ? 'checked' : ''}> 改款标签
         </label>
+
         <label class="upload-control">
           <input class="image-input" type="file" accept="image/*" hidden>
           <button class="upload-btn">上传图片</button>
         </label>
+
         <button class="delete-control danger">删除</button>
       </div>
     `).join('')
@@ -201,6 +220,12 @@ function bindRows() {
     const id = row.dataset.id;
 
     row.querySelector('.priority-input')
+      .addEventListener('change', () => save(row));
+
+    row.querySelector('.site-input')
+      .addEventListener('change', () => save(row));
+
+    row.querySelector('.business-mode-input')
       .addEventListener('change', () => save(row));
 
     row.querySelector('.makeover-input')
@@ -248,8 +273,16 @@ function bindRows() {
   });
 }
 
-// 保存优先级和改款标签
+// 保存优先级、改款、站点和业务模式
 async function save(row) {
+  const site = row.querySelector('.site-input').value.trim();
+  const businessMode = row.querySelector('.business-mode-input').value;
+
+  if (!['', '全托', '半托'].includes(businessMode)) {
+    alert('业务模式只能选择全托或半托');
+    return;
+  }
+
   try {
     await api('/api/admin/item', {
       method: 'PATCH',
@@ -257,15 +290,19 @@ async function save(row) {
       body: JSON.stringify({
         id: row.dataset.id,
         priority: row.querySelector('.priority-input').value,
-        makeover: row.querySelector('.makeover-input').checked
+        makeover: row.querySelector('.makeover-input').checked,
+        site,
+        business_mode: businessMode
       })
     });
 
-    const p = products.find(x => x.id === row.dataset.id);
+    const p = products.find(x => String(x.id) === String(row.dataset.id));
 
     if (p) {
       p.priority = Number(row.querySelector('.priority-input').value) || 999;
       p.makeover = row.querySelector('.makeover-input').checked ? 1 : 0;
+      p.site = site;
+      p.business_mode = businessMode;
       p.updated_at = new Date().toISOString();
     }
   } catch (e) {
@@ -288,23 +325,37 @@ function normalizeRows(json) {
   const hi = find('图片地址', '图片链接', 'image_url');
   const hp = find('优先级', 'priority');
   const hm = find('改款', '改款标签', 'makeover');
+  const hs = find('站点', 'site', '站点名称');
+  const hb = find('业务模式', 'business_mode');
 
   if (!hl || !hn) {
     throw new Error('Excel 必须包含“叶子类目”和“商品名称”两列');
   }
 
-  return json.map(r => ({
-    category3: r[h3] || '',
-    category4: r[h4] || '',
-    leaf_category: r[hl] || '',
-    product_name: r[hn] || '',
-    image_url: r[hi] || '',
-    priority: Number(r[hp]) || 999,
-    makeover: r[hm] || ''
-  })).filter(r =>
+  const result = json.map(r => {
+    const businessMode = String(r[hb] || '').trim();
+
+    if (!['', '全托', '半托'].includes(businessMode)) {
+      throw new Error(`业务模式“${businessMode}”不正确，只能填写全托或半托`);
+    }
+
+    return {
+      category3: r[h3] || '',
+      category4: r[h4] || '',
+      leaf_category: r[hl] || '',
+      product_name: r[hn] || '',
+      image_url: r[hi] || '',
+      priority: Number(r[hp]) || 999,
+      makeover: r[hm] || '',
+      site: String(r[hs] || '').trim(),
+      business_mode: businessMode
+    };
+  }).filter(r =>
     String(r.leaf_category).trim() &&
     String(r.product_name).trim()
   );
+
+  return result;
 }
 
 // 选择 Excel 文件
