@@ -34,11 +34,24 @@ export async function onRequestPost({ request, env }) {
   // 第三步：整理商品数据
   const now = new Date().toISOString();
 
+  // 检查业务模式是否合法
+  for (const r of rows) {
+    const businessMode = String(r.business_mode || '').trim();
+
+    if (!['', '全托', '半托'].includes(businessMode)) {
+      return Response.json({
+        error: `商品“${r.product_name || ''}”的业务模式不正确，只能填写全托或半托`
+      }, { status: 400 });
+    }
+  }
+
   const statements = rows.map((r) => {
     const category3 = String(r.category3 || '').trim();
     const category4 = String(r.category4 || '').trim();
     const leaf = String(r.leaf_category || '').trim();
     const name = String(r.product_name || '').trim();
+    const site = String(r.site || '').trim();
+    const businessMode = String(r.business_mode || '').trim();
 
     if (!leaf || !name) return null;
 
@@ -55,9 +68,11 @@ export async function onRequestPost({ request, env }) {
         priority,
         makeover,
         created_at,
-        updated_at
+        updated_at,
+        site,
+        business_mode
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
       ON CONFLICT(leaf_category, product_name)
       DO UPDATE SET
@@ -70,6 +85,16 @@ export async function onRequestPost({ request, env }) {
         END,
         priority = excluded.priority,
         makeover = excluded.makeover,
+        site = CASE
+          WHEN excluded.site <> ''
+          THEN excluded.site
+          ELSE products.site
+        END,
+        business_mode = CASE
+          WHEN excluded.business_mode <> ''
+          THEN excluded.business_mode
+          ELSE products.business_mode
+        END,
         updated_at = excluded.updated_at
     `).bind(
       id,
@@ -86,7 +111,9 @@ export async function onRequestPost({ request, env }) {
         String(r.makeover) === '是'
       ) ? 1 : 0,
       now,
-      now
+      now,
+      site,
+      businessMode
     );
   }).filter(Boolean);
 
