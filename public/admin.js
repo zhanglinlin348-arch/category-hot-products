@@ -34,7 +34,10 @@ async function api(url, opts = {}) {
 
   const r = await fetch(url, opts);
   let d = {};
-  try { d = await r.json(); } catch {}
+
+  try {
+    d = await r.json();
+  } catch {}
 
   if (!r.ok) throw new Error(d.error || `请求失败 (${r.status})`);
   return d;
@@ -272,6 +275,7 @@ function bindRows() {
           method: 'POST',
           body: fd
         });
+
         await load();
         alert('图片上传成功');
       } catch (e) {
@@ -289,6 +293,7 @@ function bindRows() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
           });
+
           await load();
         } catch (e) {
           alert(e.message);
@@ -358,14 +363,26 @@ async function save(row) {
   }
 }
 
+// 统一处理 Excel 表头：去除空格、括号差异和全角美元符号
+function normalizeHeader(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[（）()]/g, '')
+    .replace(/＄/g, '$');
+}
+
 // 识别 Excel 列
 function normalizeRows(json) {
   if (!json.length) return [];
 
   const headers = Object.keys(json[0]);
 
-  const find = (...names) =>
-    headers.find(h => names.includes(String(h).trim().toLowerCase()));
+  const find = (...names) => {
+    const targets = names.map(normalizeHeader);
+    return headers.find(h => targets.includes(normalizeHeader(h)));
+  };
 
   const h3 = find('三级类目', 'category3', '三级类目名称');
   const h4 = find('四级类目', 'category4', '四级类目名称');
@@ -376,8 +393,23 @@ function normalizeRows(json) {
   const hm = find('改款', '改款标签', 'makeover');
   const hs = find('站点', 'site', '站点名称');
   const hb = find('业务模式', 'business_mode');
-  const hprice = find('售价（$）', '售价($)', '售价', 'price');
-  const hsales = find('预估日销', '预估日销量', 'estimated_daily_sales');
+
+  const hprice = find(
+    '售价（$）',
+    '售价($)',
+    '售价$',
+    '售价',
+    '价格',
+    'price'
+  );
+
+  const hsales = find(
+    '预估日销',
+    '预估日销量',
+    '预估日销（件）',
+    '预估日销量（件）',
+    'estimated_daily_sales'
+  );
 
   if (!hl || !hn) {
     throw new Error('Excel 必须包含“叶子类目”和“商品名称”两列');
@@ -434,14 +466,50 @@ $('excelFile').addEventListener('change', async e => {
   try {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
+
+    const firstSheet = wb.Sheets[wb.SheetNames[0]];
+
     const rows = XLSX.utils.sheet_to_json(
-      wb.Sheets[wb.SheetNames[0]], { defval: '' }
+      firstSheet,
+      { defval: '' }
     );
 
+    // 解析 Excel 商品数据
     excelRows = normalizeRows(rows);
 
+    // 检查是否识别到售价和预估日销列
+    const hasPriceColumn = rows.length > 0 &&
+      Object.keys(rows[0]).some(h =>
+        [
+          '售价（$）',
+          '售价($)',
+          '售价$',
+          '售价',
+          '价格',
+          'price'
+        ].map(normalizeHeader).includes(normalizeHeader(h))
+      );
+
+    const hasSalesColumn = rows.length > 0 &&
+      Object.keys(rows[0]).some(h =>
+        [
+          '预估日销',
+          '预估日销量',
+          '预估日销（件）',
+          '预估日销量（件）',
+          'estimated_daily_sales'
+        ].map(normalizeHeader).includes(normalizeHeader(h))
+      );
+
+    const priceCount = excelRows.filter(r => r.price !== null).length;
+    const salesCount = excelRows.filter(
+      r => r.estimated_daily_sales !== null
+    ).length;
+
     $('excelStatus').textContent =
-      `已读取 ${excelRows.length} 行有效商品数据。`;
+      `已读取 ${excelRows.length} 行有效商品数据。` +
+      `售价列：${hasPriceColumn ? '已识别' : '未识别'}（${priceCount} 行有值）；` +
+      `预估日销列：${hasSalesColumn ? '已识别' : '未识别'}（${salesCount} 行有值）。`;
 
     $('importBtn').disabled = !excelRows.length;
 
