@@ -208,9 +208,19 @@ function renderTree() {
 function renderCards() {
   let rows = [...allProducts];
 
+  // 业务模式筛选
+  const businessMode = $('businessModeFilter').value;
+
+  if (businessMode) {
+    rows = rows.filter(p =>
+      (p.business_mode || '') === businessMode
+    );
+  }
+
   // 搜索时不再叠加旧的类目筛选
   if (search) {
-    rows = getSearchResults();
+    const searchResults = getSearchResults();
+    rows = rows.filter(p => searchResults.includes(p));
   } else if (selected) {
     const v = selected.value.split('|');
 
@@ -272,6 +282,12 @@ function renderCards() {
         <div class="card-body">
           <div class="card-title">${esc(p.product_name)}</div>
           <div class="crumb">${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}</div>
+          <div class="crumb">
+            站点：${esc(p.site || '未设置')}
+          </div>
+          <div class="crumb">
+            业务模式：${esc(p.business_mode || '未设置')}
+          </div>
           <div class="card-foot">
             <span>商品灵感</span>
             <span>${date(p.updated_at)}</span>
@@ -317,6 +333,10 @@ $('searchInput').addEventListener('input', e => {
 });
 
 $('sortSelect').addEventListener('change', renderCards);
+
+// 业务模式筛选
+$('businessModeFilter').addEventListener('change', renderCards);
+
 $('refreshBtn').addEventListener('click', load);
 
 $('expandAll').addEventListener('click', () => {
