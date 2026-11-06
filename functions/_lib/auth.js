@@ -4,12 +4,18 @@ export async function isAdmin(request, env) {
     ? authHeader.slice(7).trim()
     : '';
 
-  if (!token) return false;
+  if (!token) {
+    console.error('[admin-auth] Missing bearer token');
+    return false;
+  }
 
   const supabaseUrl = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
   const secretKey = env.SUPABASE_SECRET_KEY || '';
 
-  if (!supabaseUrl || !secretKey) return false;
+  if (!supabaseUrl || !secretKey) {
+    console.error('[admin-auth] Missing Supabase environment variable');
+    return false;
+  }
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -20,11 +26,27 @@ export async function isAdmin(request, env) {
       }
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error(
+        '[admin-auth] Supabase rejected request:',
+        response.status,
+        detail.slice(0, 300)
+      );
+      return false;
+    }
 
     const user = await response.json();
-    return user.app_metadata?.role === 'admin';
-  } catch {
+    const isAdmin = user.app_metadata?.role === 'admin';
+
+    if (!isAdmin) {
+      console.error('[admin-auth] User authenticated but admin role is missing');
+    }
+
+    return isAdmin;
+
+  } catch (error) {
+    console.error('[admin-auth] Verification error:', error.message);
     return false;
   }
 }
