@@ -1,3 +1,4 @@
+
 export async function onRequestGet({ env }) {
   const { results = [] } = await env.DB.prepare(
     `SELECT
@@ -11,6 +12,8 @@ export async function onRequestGet({ env }) {
       makeover,
       site,
       business_mode,
+      price,
+      estimated_daily_sales,
       created_at,
       updated_at
      FROM products
