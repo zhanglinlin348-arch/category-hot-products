@@ -31,10 +31,9 @@ export async function onRequestPost({ request, env }) {
     }, { status: 400 });
   }
 
-  // 第三步：整理商品数据
   const now = new Date().toISOString();
 
-  // 检查业务模式是否合法
+  // 第三步：检查数据是否合法
   for (const r of rows) {
     const businessMode = String(r.business_mode || '').trim();
 
@@ -43,8 +42,35 @@ export async function onRequestPost({ request, env }) {
         error: `商品“${r.product_name || ''}”的业务模式不正确，只能填写全托或半托`
       }, { status: 400 });
     }
+
+    // 售价：允许空值，非空必须是非负数字
+    if (r.price !== undefined && r.price !== null && r.price !== '') {
+      const price = Number(r.price);
+
+      if (!Number.isFinite(price) || price < 0) {
+        return Response.json({
+          error: `商品“${r.product_name || ''}”的售价不正确，必须是大于或等于 0 的数字`
+        }, { status: 400 });
+      }
+    }
+
+    // 预估日销：允许空值，非空必须是非负整数
+    if (
+      r.estimated_daily_sales !== undefined &&
+      r.estimated_daily_sales !== null &&
+      r.estimated_daily_sales !== ''
+    ) {
+      const sales = Number(r.estimated_daily_sales);
+
+      if (!Number.isInteger(sales) || sales < 0) {
+        return Response.json({
+          error: `商品“${r.product_name || ''}”的预估日销不正确，必须是大于或等于 0 的整数`
+        }, { status: 400 });
+      }
+    }
   }
 
+  // 第四步：整理商品数据
   const statements = rows.map((r) => {
     const category3 = String(r.category3 || '').trim();
     const category4 = String(r.category4 || '').trim();
@@ -56,6 +82,22 @@ export async function onRequestPost({ request, env }) {
     if (!leaf || !name) return null;
 
     const id = crypto.randomUUID();
+
+    const hasPrice =
+      r.price !== undefined &&
+      r.price !== null &&
+      r.price !== '';
+
+    const price = hasPrice ? Number(r.price) : null;
+
+    const hasDailySales =
+      r.estimated_daily_sales !== undefined &&
+      r.estimated_daily_sales !== null &&
+      r.estimated_daily_sales !== '';
+
+    const estimatedDailySales = hasDailySales
+      ? Number(r.estimated_daily_sales)
+      : null;
 
     return env.DB.prepare(`
       INSERT INTO products (
@@ -70,9 +112,11 @@ export async function onRequestPost({ request, env }) {
         created_at,
         updated_at,
         site,
-        business_mode
+        business_mode,
+        price,
+        estimated_daily_sales
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
       ON CONFLICT(leaf_category, product_name)
       DO UPDATE SET
@@ -95,6 +139,16 @@ export async function onRequestPost({ request, env }) {
           THEN excluded.business_mode
           ELSE products.business_mode
         END,
+        price = CASE
+          WHEN excluded.price IS NOT NULL
+          THEN excluded.price
+          ELSE products.price
+        END,
+        estimated_daily_sales = CASE
+          WHEN excluded.estimated_daily_sales IS NOT NULL
+          THEN excluded.estimated_daily_sales
+          ELSE products.estimated_daily_sales
+        END,
         updated_at = excluded.updated_at
     `).bind(
       id,
@@ -113,18 +167,20 @@ export async function onRequestPost({ request, env }) {
       now,
       now,
       site,
-      businessMode
+      businessMode,
+      price,
+      estimatedDailySales
     );
   }).filter(Boolean);
 
-  // 第四步：检查有效数据
+  // 第五步：检查有效数据
   if (!statements.length) {
     return Response.json({
       error: '请至少提供叶子类目和商品名称'
     }, { status: 400 });
   }
 
-  // 第五步：写入 D1 数据库
+  // 第六步：写入 D1 数据库
   try {
     await env.DB.batch(statements);
 
