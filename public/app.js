@@ -41,15 +41,15 @@ function showImagePreview(img) {
 
   const rect = container.getBoundingClientRect();
 
-  // 放大两倍，限制在浏览器可视范围内
+  // 以原图片区域为中心放大2倍
   const maxW = Math.min(
     rect.width * 2,
-    window.innerWidth * 0.85
+    window.innerWidth * 0.9
   );
 
   const maxH = Math.min(
     rect.height * 2,
-    window.innerHeight * 0.85
+    window.innerHeight * 0.9
   );
 
   // 保持图片原始比例
@@ -65,31 +65,17 @@ function showImagePreview(img) {
   imagePreview.style.width = width + 'px';
   imagePreview.style.height = height + 'px';
 
-  // 默认显示在商品图片右侧
-  let left = rect.right + 12;
-  let top = rect.top + (rect.height - height) / 2;
+  // 放大图中心与原商品图片中心重合
+  const left = rect.left + (rect.width - width) / 2;
+  const top = rect.top + (rect.height - height) / 2;
 
-  // 右侧空间不足，显示在左侧
-  if (left + width > window.innerWidth - 10) {
-    left = rect.left - width - 12;
-  }
+  // 避免超出浏览器可视区域
+  imagePreview.style.left =
+    Math.max(5, Math.min(left, window.innerWidth - width - 5)) + 'px';
 
-  // 左侧也放不下，尽量靠近原图
-  if (left < 10) {
-    left = Math.max(
-      10,
-      Math.min(rect.left, window.innerWidth - width - 10)
-    );
-  }
+  imagePreview.style.top =
+    Math.max(5, Math.min(top, window.innerHeight - height - 5)) + 'px';
 
-  // 防止超出页面上下边缘
-  top = Math.max(
-    10,
-    Math.min(top, window.innerHeight - height - 10)
-  );
-
-  imagePreview.style.left = left + 'px';
-  imagePreview.style.top = top + 'px';
   imagePreview.style.display = 'block';
 }
 
@@ -105,7 +91,7 @@ function setupImageClickPreview() {
 
   document.body.appendChild(imagePreview);
 
-  // 点击商品图片：放大或恢复
+  // 点击商品图片：放大或切换
   cards.addEventListener('click', event => {
     const img = event.target.closest('.product-image img');
 
@@ -121,7 +107,7 @@ function setupImageClickPreview() {
 
     activePreviewImage = img;
 
-    // 图片已加载，直接显示
+    // 图片已经加载完成
     if (img.complete && img.naturalWidth) {
       showImagePreview(img);
     } else {
@@ -135,7 +121,7 @@ function setupImageClickPreview() {
     }
   });
 
-  // 点击放大图片本身，关闭预览
+  // 点击放大图，关闭预览
   imagePreview.addEventListener('click', event => {
     event.stopPropagation();
     hideImagePreview();
