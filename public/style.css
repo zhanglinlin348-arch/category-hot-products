@@ -170,7 +170,7 @@ body {
   box-shadow: 0 5px 20px rgba(0, 0, 0, .08);
 }
 
-/* 商品图片区域 */
+/* 商品图片区域：完整显示原图 */
 
 .product-image {
   height: 220px;
@@ -251,7 +251,7 @@ body {
   grid-column: 1 / -1;
 }
 
-/* 点击图片后的放大预览 */
+/* 点击放大：在原卡片位置上方覆盖显示 */
 
 .image-hover-preview {
   position: fixed;
@@ -260,11 +260,12 @@ body {
   object-position: center;
   background: #fff;
   border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, .25);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
   cursor: zoom-out;
   display: none;
-  max-width: 85vw;
-  max-height: 85vh;
+  max-width: 90vw;
+  max-height: 90vh;
+  pointer-events: auto;
 }
 
 /* 后台管理 */
