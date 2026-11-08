@@ -150,9 +150,11 @@ body {
   font-size: 13px;
 }
 
+/* 商品卡片：电脑网页一排3个 */
+
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -243,6 +245,7 @@ body {
 }
 
 /* 商品图片悬停放大预览 */
+
 .image-hover-preview {
   position: fixed;
   z-index: 99999;
@@ -305,13 +308,15 @@ body {
   border-radius: 8px;
 }
 
-/* 平板适配 */
+/* 中等屏幕 */
 
 @media (max-width: 1100px) {
   .cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* 平板 */
 
 @media (max-width: 850px) {
   .layout {
@@ -323,7 +328,7 @@ body {
   }
 }
 
-/* 手机适配 */
+/* 手机 */
 
 @media (max-width: 520px) {
   .topbar {
