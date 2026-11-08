@@ -4,8 +4,8 @@ let selected = null;
 let expanded = new Set();
 let search = '';
 
-let hoverPreview = null;
-let activeHoverImage = null;
+let imagePreview = null;
+let activePreviewImage = null;
 
 const $ = id => document.getElementById(id);
 
@@ -22,118 +22,134 @@ function categoryPath(p) {
 }
 
 // ==============================
-// 商品图片悬停放大预览
+// 商品图片点击放大
 // ==============================
 
 function hideImagePreview() {
-  activeHoverImage = null;
+  activePreviewImage = null;
 
-  if (hoverPreview) {
-    hoverPreview.style.display = 'none';
+  if (imagePreview) {
+    imagePreview.style.display = 'none';
   }
 }
 
-function setupImageHoverPreview() {
+function showImagePreview(img) {
+  if (!img || !img.naturalWidth || !img.naturalHeight) return;
+
+  const container = img.closest('.product-image');
+  if (!container) return;
+
+  const rect = container.getBoundingClientRect();
+
+  // 放大两倍，限制在浏览器可视范围内
+  const maxW = Math.min(
+    rect.width * 2,
+    window.innerWidth * 0.85
+  );
+
+  const maxH = Math.min(
+    rect.height * 2,
+    window.innerHeight * 0.85
+  );
+
+  // 保持图片原始比例
+  const scale = Math.min(
+    maxW / img.naturalWidth,
+    maxH / img.naturalHeight
+  );
+
+  const width = img.naturalWidth * scale;
+  const height = img.naturalHeight * scale;
+
+  imagePreview.src = img.currentSrc || img.src;
+  imagePreview.style.width = width + 'px';
+  imagePreview.style.height = height + 'px';
+
+  // 默认显示在商品图片右侧
+  let left = rect.right + 12;
+  let top = rect.top + (rect.height - height) / 2;
+
+  // 右侧空间不足，显示在左侧
+  if (left + width > window.innerWidth - 10) {
+    left = rect.left - width - 12;
+  }
+
+  // 左侧也放不下，尽量靠近原图
+  if (left < 10) {
+    left = Math.max(
+      10,
+      Math.min(rect.left, window.innerWidth - width - 10)
+    );
+  }
+
+  // 防止超出页面上下边缘
+  top = Math.max(
+    10,
+    Math.min(top, window.innerHeight - height - 10)
+  );
+
+  imagePreview.style.left = left + 'px';
+  imagePreview.style.top = top + 'px';
+  imagePreview.style.display = 'block';
+}
+
+function setupImageClickPreview() {
   const cards = $('cards');
 
-  if (!cards || hoverPreview) return;
+  if (!cards || imagePreview) return;
 
-  hoverPreview = document.createElement('img');
-  hoverPreview.className = 'image-hover-preview';
-  hoverPreview.alt = '商品图片放大预览';
+  imagePreview = document.createElement('img');
+  imagePreview.className = 'image-hover-preview';
+  imagePreview.alt = '商品图片放大预览';
+  imagePreview.title = '点击图片关闭预览';
 
-  document.body.appendChild(hoverPreview);
+  document.body.appendChild(imagePreview);
 
-  cards.addEventListener('pointerover', event => {
+  // 点击商品图片：放大或恢复
+  cards.addEventListener('click', event => {
     const img = event.target.closest('.product-image img');
 
     if (!img || !cards.contains(img)) return;
 
-    const container = img.closest('.product-image');
+    event.stopPropagation();
 
-    if (event.relatedTarget && container.contains(event.relatedTarget)) {
+    // 再次点击同一张图片，关闭放大
+    if (activePreviewImage === img) {
+      hideImagePreview();
       return;
     }
 
-    activeHoverImage = img;
+    activePreviewImage = img;
 
-    const showPreview = () => {
-      if (activeHoverImage !== img) return;
-      if (!img.naturalWidth || !img.naturalHeight) return;
-
-      const rect = container.getBoundingClientRect();
-
-      // 放大两倍，同时限制在浏览器可视范围内
-      const maxW = Math.min(
-        rect.width * 2,
-        window.innerWidth * 0.85
-      );
-
-      const maxH = Math.min(
-        rect.height * 2,
-        window.innerHeight * 0.85
-      );
-
-      // 保持原图比例，完整显示图片
-      const scale = Math.min(
-        maxW / img.naturalWidth,
-        maxH / img.naturalHeight
-      );
-
-      const width = img.naturalWidth * scale;
-      const height = img.naturalHeight * scale;
-
-      hoverPreview.src = img.currentSrc || img.src;
-      hoverPreview.style.width = width + 'px';
-      hoverPreview.style.height = height + 'px';
-
-      // 默认放在原图片右侧
-      let left = rect.right + 12;
-      let top = rect.top + (rect.height - height) / 2;
-
-      // 右侧空间不够，改放左侧
-      if (left + width > window.innerWidth - 10) {
-        left = rect.left - width - 12;
-      }
-
-      // 左侧也不够时，尽量靠近原图显示
-      if (left < 10) {
-        left = Math.max(
-          10,
-          Math.min(rect.left, window.innerWidth - width - 10)
-        );
-      }
-
-      // 避免图片超出页面上下边缘
-      top = Math.max(
-        10,
-        Math.min(top, window.innerHeight - height - 10)
-      );
-
-      hoverPreview.style.left = left + 'px';
-      hoverPreview.style.top = top + 'px';
-      hoverPreview.style.display = 'block';
-    };
-
+    // 图片已加载，直接显示
     if (img.complete && img.naturalWidth) {
-      showPreview();
+      showImagePreview(img);
     } else {
-      img.addEventListener('load', showPreview, { once: true });
+      imagePreview.style.display = 'none';
+
+      img.addEventListener('load', () => {
+        if (activePreviewImage === img) {
+          showImagePreview(img);
+        }
+      }, { once: true });
     }
   });
 
-  cards.addEventListener('pointerout', event => {
-    const container = event.target.closest('.product-image');
+  // 点击放大图片本身，关闭预览
+  imagePreview.addEventListener('click', event => {
+    event.stopPropagation();
+    hideImagePreview();
+  });
 
-    if (!container || !cards.contains(container)) return;
-
-    if (event.relatedTarget && container.contains(event.relatedTarget)) {
-      return;
-    }
+  // 点击页面其他位置，关闭预览
+  document.addEventListener('click', event => {
+    if (imagePreview.contains(event.target)) return;
+    if (event.target.closest('.product-image img')) return;
 
     hideImagePreview();
   });
 
+  // 页面滚动、窗口切换或尺寸变化时关闭预览
   window.addEventListener('scroll', hideImagePreview, true);
   window.addEventListener('blur', hideImagePreview);
   window.addEventListener('resize', hideImagePreview);
@@ -519,7 +535,7 @@ $('expandAll').addEventListener('click', () => {
 // 页面初始化
 // ==============================
 
-setupImageHoverPreview();
+setupImageClickPreview();
 
 load();
 
