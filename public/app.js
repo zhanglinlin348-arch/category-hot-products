@@ -3,7 +3,9 @@ let allProducts = [];
 let selected = null;
 let expanded = new Set();
 let search = '';
+
 let hoverPreview = null;
+let activeHoverImage = null;
 
 const $ = id => document.getElementById(id);
 
@@ -19,26 +21,29 @@ function categoryPath(p) {
   ];
 }
 
-// 隐藏图片放大预览
+// ==============================
+// 商品图片悬停放大预览
+// ==============================
+
 function hideImagePreview() {
+  activeHoverImage = null;
+
   if (hoverPreview) {
     hoverPreview.style.display = 'none';
-    hoverPreview.removeAttribute('src');
   }
 }
 
-// 初始化图片悬停放大功能
 function setupImageHoverPreview() {
   const cards = $('cards');
+
+  if (!cards || hoverPreview) return;
 
   hoverPreview = document.createElement('img');
   hoverPreview.className = 'image-hover-preview';
   hoverPreview.alt = '商品图片放大预览';
-  hoverPreview.style.display = 'none';
 
   document.body.appendChild(hoverPreview);
 
-  // 鼠标移入商品图片
   cards.addEventListener('pointerover', event => {
     const img = event.target.closest('.product-image img');
 
@@ -46,64 +51,120 @@ function setupImageHoverPreview() {
 
     const container = img.closest('.product-image');
 
-    if (
-      event.relatedTarget &&
-      container.contains(event.relatedTarget)
-    ) return;
+    if (event.relatedTarget && container.contains(event.relatedTarget)) {
+      return;
+    }
 
-    const rect = container.getBoundingClientRect();
+    activeHoverImage = img;
 
-    hoverPreview.src = img.currentSrc || img.src;
-    hoverPreview.alt = img.alt || '商品图片';
+    const showPreview = () => {
+      if (activeHoverImage !== img) return;
+      if (!img.naturalWidth || !img.naturalHeight) return;
 
-    // 放大1.5倍，同时避免超出浏览器窗口
-    const width = Math.min(
-      rect.width * 1.5,
-      window.innerWidth * 0.85
-    );
+      const rect = container.getBoundingClientRect();
 
-    const height = Math.min(
-      rect.height * 1.5,
-      window.innerHeight * 0.85
-    );
+      // 放大两倍，同时限制在浏览器可视范围内
+      const maxW = Math.min(
+        rect.width * 2,
+        window.innerWidth * 0.85
+      );
 
-    hoverPreview.style.width = width + 'px';
-    hoverPreview.style.height = height + 'px';
+      const maxH = Math.min(
+        rect.height * 2,
+        window.innerHeight * 0.85
+      );
 
-    // 显示在页面正中央
-    hoverPreview.style.display = 'block';
+      // 保持原图比例，完整显示图片
+      const scale = Math.min(
+        maxW / img.naturalWidth,
+        maxH / img.naturalHeight
+      );
+
+      const width = img.naturalWidth * scale;
+      const height = img.naturalHeight * scale;
+
+      hoverPreview.src = img.currentSrc || img.src;
+      hoverPreview.style.width = width + 'px';
+      hoverPreview.style.height = height + 'px';
+
+      // 默认放在原图片右侧
+      let left = rect.right + 12;
+      let top = rect.top + (rect.height - height) / 2;
+
+      // 右侧空间不够，改放左侧
+      if (left + width > window.innerWidth - 10) {
+        left = rect.left - width - 12;
+      }
+
+      // 左侧也不够时，尽量靠近原图显示
+      if (left < 10) {
+        left = Math.max(
+          10,
+          Math.min(rect.left, window.innerWidth - width - 10)
+        );
+      }
+
+      // 避免图片超出页面上下边缘
+      top = Math.max(
+        10,
+        Math.min(top, window.innerHeight - height - 10)
+      );
+
+      hoverPreview.style.left = left + 'px';
+      hoverPreview.style.top = top + 'px';
+      hoverPreview.style.display = 'block';
+    };
+
+    if (img.complete && img.naturalWidth) {
+      showPreview();
+    } else {
+      img.addEventListener('load', showPreview, { once: true });
+    }
   });
 
-  // 鼠标移出商品图片
   cards.addEventListener('pointerout', event => {
     const container = event.target.closest('.product-image');
 
     if (!container || !cards.contains(container)) return;
 
-    if (
-      event.relatedTarget &&
-      container.contains(event.relatedTarget)
-    ) return;
+    if (event.relatedTarget && container.contains(event.relatedTarget)) {
+      return;
+    }
 
     hideImagePreview();
   });
+
+  window.addEventListener('scroll', hideImagePreview, true);
+  window.addEventListener('blur', hideImagePreview);
+  window.addEventListener('resize', hideImagePreview);
 }
+
+// ==============================
+// 数据加载
+// ==============================
 
 async function load() {
   try {
     const r = await fetch('/api/public/data');
+
     if (!r.ok) throw new Error('数据请求失败');
 
     const d = await r.json();
+
     allProducts = d.products || [];
 
     renderTree();
     renderCards();
+
   } catch (e) {
     $('cards').innerHTML =
       '<div class="empty">数据加载失败，请稍后刷新</div>';
   }
 }
+
+// ==============================
+// 类目树
+// ==============================
 
 function treeData() {
   const root = {};
@@ -119,7 +180,6 @@ function treeData() {
   return root;
 }
 
-// 获取搜索匹配的商品
 function getSearchResults() {
   const q = norm(search);
 
@@ -137,7 +197,6 @@ function getSearchResults() {
   });
 }
 
-// 搜索时自动展开对应类目
 function updateSearchExpansion() {
   if (!search) return;
 
@@ -165,6 +224,7 @@ function renderTree() {
 
   const q = norm(search);
   const searchResults = q ? getSearchResults() : [];
+
   let html = '';
 
   for (const [a, lv4] of Object.entries(root)) {
@@ -242,7 +302,6 @@ function renderTree() {
   $('tree').innerHTML = html ||
     '<div class="empty">没有匹配的类目</div>';
 
-  // 类目点击事件
   $('tree').querySelectorAll('.tree-label').forEach(el => {
     el.addEventListener('click', () => {
       const type = el.dataset.type;
@@ -279,12 +338,15 @@ function renderTree() {
   });
 }
 
+// ==============================
+// 商品卡片
+// ==============================
+
 function renderCards() {
   hideImagePreview();
 
   let rows = [...allProducts];
 
-  // 业务模式筛选
   const businessMode = $('businessModeFilter').value;
 
   if (businessMode) {
@@ -293,10 +355,11 @@ function renderCards() {
     );
   }
 
-  // 搜索时不再叠加旧的类目筛选
   if (search) {
     const searchResults = getSearchResults();
+
     rows = rows.filter(p => searchResults.includes(p));
+
   } else if (selected) {
     const v = selected.value.split('|');
 
@@ -315,7 +378,6 @@ function renderCards() {
     });
   }
 
-  // 排序
   const sort = $('sortSelect').value;
 
   rows.sort((a, b) =>
@@ -324,7 +386,6 @@ function renderCards() {
       : (new Date(b.updated_at) - new Date(a.updated_at))
   );
 
-  // 标题
   $('heading').textContent = search
     ? '搜索结果'
     : selected
@@ -337,7 +398,6 @@ function renderCards() {
       ? '当前类目下的商品与改款机会'
       : '按类目浏览商品灵感与改款机会';
 
-  // 当前筛选路径
   $('activePath').innerHTML = search
     ? `<span class="chip">搜索：${esc(search)}</span>`
     : selected
@@ -348,7 +408,6 @@ function renderCards() {
 
   $('resultCount').textContent = `${rows.length} 件商品`;
 
-  // 商品卡片
   $('cards').innerHTML = rows.length
     ? rows.map(p => `
       <article class="product-card">
@@ -359,25 +418,34 @@ function renderCards() {
           ${p.makeover ? '<span class="makeover">改款</span>' : ''}
           <span class="priority">优先级 ${p.priority}</span>
         </div>
+
         <div class="card-body">
           <div class="card-title">${esc(p.product_name)}</div>
-          <div class="crumb">${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}</div>
+
+          <div class="crumb">
+            ${esc(p.category3)} / ${esc(p.category4)} / ${esc(p.leaf_category)}
+          </div>
+
           <div class="crumb">
             站点：${esc(p.site || '未设置')}
           </div>
+
           <div class="crumb">
             业务模式：${esc(p.business_mode || '未设置')}
           </div>
+
           <div class="crumb">
             售价：${p.price !== null && p.price !== undefined && p.price !== ''
               ? '$' + Number(p.price).toFixed(2)
               : '未设置'}
           </div>
+
           <div class="crumb">
             预估日销：${p.estimated_daily_sales !== null && p.estimated_daily_sales !== undefined && p.estimated_daily_sales !== ''
               ? Number(p.estimated_daily_sales) + ' 件/天'
               : '未设置'}
           </div>
+
           <div class="card-foot">
             <span>商品灵感</span>
             <span>${date(p.updated_at)}</span>
@@ -388,8 +456,14 @@ function renderCards() {
     : '<div class="empty">当前条件下暂无商品</div>';
 }
 
+// ==============================
+// 通用辅助函数
+// ==============================
+
 function date(s) {
-  return s ? new Date(s).toLocaleDateString('zh-CN') : '—';
+  return s
+    ? new Date(s).toLocaleDateString('zh-CN')
+    : '—';
 }
 
 function esc(s) {
@@ -402,7 +476,10 @@ function esc(s) {
   }[c]));
 }
 
-// 搜索框
+// ==============================
+// 页面事件
+// ==============================
+
 $('searchInput').addEventListener('input', e => {
   search = e.target.value.trim();
 
@@ -421,16 +498,12 @@ $('searchInput').addEventListener('input', e => {
   renderCards();
 });
 
-// 排序
 $('sortSelect').addEventListener('change', renderCards);
 
-// 业务模式筛选
 $('businessModeFilter').addEventListener('change', renderCards);
 
-// 刷新
 $('refreshBtn').addEventListener('click', load);
 
-// 展开全部类目
 $('expandAll').addEventListener('click', () => {
   for (const p of allProducts) {
     const [a, b] = categoryPath(p);
@@ -442,11 +515,12 @@ $('expandAll').addEventListener('click', () => {
   renderTree();
 });
 
-// 初始化图片放大功能
+// ==============================
+// 页面初始化
+// ==============================
+
 setupImageHoverPreview();
 
-// 初始加载
 load();
 
-// 每60秒自动刷新
 setInterval(load, 60000);
