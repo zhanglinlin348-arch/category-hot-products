@@ -3,6 +3,7 @@ let allProducts = [];
 let selected = null;
 let expanded = new Set();
 let search = '';
+let hoverPreview = null;
 
 const $ = id => document.getElementById(id);
 
@@ -16,6 +17,76 @@ function categoryPath(p) {
     p.category4 || '未分类',
     p.leaf_category || '未分类'
   ];
+}
+
+// 隐藏图片放大预览
+function hideImagePreview() {
+  if (hoverPreview) {
+    hoverPreview.style.display = 'none';
+    hoverPreview.removeAttribute('src');
+  }
+}
+
+// 初始化图片悬停放大功能
+function setupImageHoverPreview() {
+  const cards = $('cards');
+
+  hoverPreview = document.createElement('img');
+  hoverPreview.className = 'image-hover-preview';
+  hoverPreview.alt = '商品图片放大预览';
+  hoverPreview.style.display = 'none';
+
+  document.body.appendChild(hoverPreview);
+
+  // 鼠标移入商品图片
+  cards.addEventListener('pointerover', event => {
+    const img = event.target.closest('.product-image img');
+
+    if (!img || !cards.contains(img)) return;
+
+    const container = img.closest('.product-image');
+
+    if (
+      event.relatedTarget &&
+      container.contains(event.relatedTarget)
+    ) return;
+
+    const rect = container.getBoundingClientRect();
+
+    hoverPreview.src = img.currentSrc || img.src;
+    hoverPreview.alt = img.alt || '商品图片';
+
+    // 放大1.5倍，同时避免超出浏览器窗口
+    const width = Math.min(
+      rect.width * 1.5,
+      window.innerWidth * 0.85
+    );
+
+    const height = Math.min(
+      rect.height * 1.5,
+      window.innerHeight * 0.85
+    );
+
+    hoverPreview.style.width = width + 'px';
+    hoverPreview.style.height = height + 'px';
+
+    // 显示在页面正中央
+    hoverPreview.style.display = 'block';
+  });
+
+  // 鼠标移出商品图片
+  cards.addEventListener('pointerout', event => {
+    const container = event.target.closest('.product-image');
+
+    if (!container || !cards.contains(container)) return;
+
+    if (
+      event.relatedTarget &&
+      container.contains(event.relatedTarget)
+    ) return;
+
+    hideImagePreview();
+  });
 }
 
 async function load() {
@@ -209,6 +280,8 @@ function renderTree() {
 }
 
 function renderCards() {
+  hideImagePreview();
+
   let rows = [...allProducts];
 
   // 业务模式筛选
@@ -368,6 +441,9 @@ $('expandAll').addEventListener('click', () => {
 
   renderTree();
 });
+
+// 初始化图片放大功能
+setupImageHoverPreview();
 
 // 初始加载
 load();
